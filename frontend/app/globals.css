@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --sp-bg: #0a0a0f;
+  --sp-surface: #12121a;
+  --sp-border: #1e1e2e;
+  --sp-text: #e0e0e8;
+  --sp-muted: #6b6b80;
+  --sp-cyan: #00ffff;
+  --sp-green: #00ff88;
+  --sp-red: #ff3366;
+  --sp-orange: #ff8800;
+  --sp-yellow: #ffcc00;
+  --sp-purple: #aa44ff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sp-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--sp-border);
+  border-radius: 3px;
+}
+
+body {
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Glow effects */
+.glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+.glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.glow-red {
+  text-shadow: 0 0 10px rgba(255, 51, 102, 0.5);
+}
+
+/* Scan line overlay effect */
+.scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 255, 0.02) 2px,
+    rgba(0, 255, 255, 0.02) 4px
+  );
+  pointer-events: none;
+}
+
+/* Pulse animation for active scans */
+@keyframes pulse-cyan {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-cyan {
+  animation: pulse-cyan 2s ease-in-out infinite;
+}
+
+/* Border glow for active elements */
+.border-glow-cyan {
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2), inset 0 0 8px rgba(0, 255, 255, 0.05);
+}
+
+/* Scan progress bar animation */
+@keyframes scan-bar {
+  0% { width: 0%; margin-left: 0%; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+.animate-scan-bar {
+  animation: scan-bar 2s ease-in-out infinite;
+}

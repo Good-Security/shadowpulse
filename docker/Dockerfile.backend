@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install Docker CLI (static binary — lightweight, no apt repo needed)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* && \
+    DOCKER_ARCH=$(uname -m) && \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-27.4.1.tgz" -o /tmp/docker.tgz && \
+    tar -xzf /tmp/docker.tgz --strip-components=1 -C /usr/local/bin/ docker/docker && \
+    rm /tmp/docker.tgz && \
+    chmod +x /usr/local/bin/docker
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ .
+
+CMD ["sh", "-lc", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"]

@@ -1,0 +1,5 @@
+This directory contains Alembic migrations for the SHADOWPULSE backend.
+
+Common commands (run from the backend directory):
+- `alembic upgrade head`
+- `alembic revision --autogenerate -m "message"`

@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+env/
+*.db
+*.sqlite3
+pip-log.txt
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnp.*
+.yarn/*
+!.yarn/patches
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Data / scan artifacts
+data/scans/*
+!data/scans/.gitkeep
+
+# Docker
+docker-compose.override.yml
+
+# PostgreSQL local data
+pgdata/
+postgres-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Alembic auto-generated
+*.pyc
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+*.tmp
