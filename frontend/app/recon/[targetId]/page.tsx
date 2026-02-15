@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { ReconGraph } from "@/components/recon/recon-graph";
+import { AssetBrowser } from "@/components/recon/asset-browser";
+import { ServiceBrowser } from "@/components/recon/service-browser";
+import { ChangeViewer } from "@/components/recon/change-viewer";
 
 type RunRow = {
   id: string;
@@ -15,6 +18,8 @@ type RunRow = {
   created_at: string | null;
 };
 
+type ContentTab = "overview" | "assets" | "services" | "graph";
+
 function fmt(ts?: string | null): string {
   if (!ts) return "-";
   try {
@@ -22,6 +27,31 @@ function fmt(ts?: string | null): string {
   } catch {
     return ts;
   }
+}
+
+function fmtInterval(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  return h > 0 ? `${d}d ${h}h` : `${d}d`;
+}
+
+function fmtRelative(ts?: string | null): string {
+  if (!ts) return "-";
+  const d = new Date(ts);
+  const now = Date.now();
+  const diff = d.getTime() - now;
+  if (diff < 0) return "overdue";
+  if (diff < 60000) return "< 1m";
+  if (diff < 3600000) return `in ${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000) return `in ${Math.floor(diff / 3600000)}h`;
+  return `in ${Math.floor(diff / 86400000)}d`;
 }
 
 function badge(status: string): string {
@@ -34,11 +64,19 @@ function badge(status: string): string {
   return "border-sp-border text-sp-muted bg-sp-bg/30";
 }
 
+const TABS: { key: ContentTab; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "assets", label: "Assets" },
+  { key: "services", label: "Services" },
+  { key: "graph", label: "Graph" },
+];
+
 export default function TargetReconPage({ params }: { params: { targetId: string } }) {
   const targetId = params.targetId;
   const [target, setTarget] = useState<any>(null);
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ContentTab>("overview");
 
   const [schedules, setSchedules] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -189,6 +227,25 @@ export default function TargetReconPage({ params }: { params: { targetId: string
     }
   }
 
+  async function toggleSchedule(scheduleId: string, enabled: boolean) {
+    try {
+      await api.updateSchedule(scheduleId, { enabled });
+      const sch = await api.listSchedules(targetId);
+      setSchedules(sch as any);
+    } catch (e: any) {
+      setErr(e?.message || "Failed to update schedule");
+    }
+  }
+
+  async function deleteSchedule(scheduleId: string) {
+    try {
+      await api.deleteSchedule(scheduleId);
+      setSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
+    } catch (e: any) {
+      setErr(e?.message || "Failed to delete schedule");
+    }
+  }
+
   const runScans = useMemo(() => (selectedRunId ? scans.filter((s) => s.run_id === selectedRunId) : []), [scans, selectedRunId]);
   const runFindings = useMemo(() => (selectedRunId ? findings.filter((f) => f.run_id === selectedRunId) : []), [findings, selectedRunId]);
 
@@ -220,6 +277,7 @@ export default function TargetReconPage({ params }: { params: { targetId: string
       <main className="p-4 max-w-7xl mx-auto space-y-4">
         {err ? <div className="text-xs text-sp-red border border-sp-red/30 bg-sp-red/10 rounded p-2">{err}</div> : null}
 
+        {/* Target header + run controls */}
         <section className="border border-sp-border bg-sp-surface rounded p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -276,6 +334,7 @@ export default function TargetReconPage({ params }: { params: { targetId: string
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Left sidebar: run list */}
           <section className="lg:col-span-1 border border-sp-border bg-sp-surface rounded p-3">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs uppercase tracking-wider text-sp-muted">Runs</div>
@@ -305,211 +364,300 @@ export default function TargetReconPage({ params }: { params: { targetId: string
             </div>
           </section>
 
+          {/* Right content: tabbed */}
           <section className="lg:col-span-2 space-y-4">
-            <section className="border border-sp-border bg-sp-surface rounded p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-xs uppercase tracking-wider text-sp-muted">Changes</div>
-                <div className="text-[10px] text-sp-muted">{selectedRunId ? selectedRunId.slice(0, 8) : "-"}</div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-                <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                  <div className="text-[10px] text-sp-muted uppercase tracking-wider">New Assets</div>
-                  <div className="text-lg text-sp-text">{changes?.counts?.new_assets ?? "-"}</div>
-                </div>
-                <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                  <div className="text-[10px] text-sp-muted uppercase tracking-wider">New Services</div>
-                  <div className="text-lg text-sp-text">{changes?.counts?.new_services ?? "-"}</div>
-                </div>
-                <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                  <div className="text-[10px] text-sp-muted uppercase tracking-wider">Pending Verify</div>
-                  <div className="text-lg text-sp-text">
-                    {(changes?.counts?.pending_assets ?? 0) + (changes?.counts?.pending_services ?? 0)}
-                  </div>
-                </div>
-                <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                  <div className="text-[10px] text-sp-muted uppercase tracking-wider">Closed/Unres</div>
-                  <div className="text-lg text-sp-text">
-                    {(changes?.counts?.confirmed_closed_assets ?? 0) +
-                      (changes?.counts?.confirmed_closed_services ?? 0) +
-                      (changes?.counts?.confirmed_unresolved_assets ?? 0) +
-                      (changes?.counts?.confirmed_unresolved_services ?? 0)}
-                  </div>
-                </div>
-              </div>
-            </section>
+            {/* Tab bar */}
+            <div className="flex border border-sp-border rounded bg-sp-surface overflow-hidden">
+              {TABS.map(({ key, label }) => {
+                const count =
+                  key === "assets" ? assets.length :
+                  key === "services" ? services.length :
+                  key === "graph" ? `${assets.length}n/${edges.length}e` :
+                  null;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`flex-1 px-3 py-2 text-[10px] uppercase tracking-wider transition-colors ${
+                      activeTab === key
+                        ? "text-sp-cyan border-b-2 border-sp-cyan bg-sp-bg/30"
+                        : "text-sp-muted hover:text-sp-text"
+                    }`}
+                  >
+                    {label}
+                    {count !== null && (
+                      <span className="ml-1 text-sp-muted">({count})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-            <section className="border border-sp-border bg-sp-surface rounded p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-xs uppercase tracking-wider text-sp-muted">Jobs (Run)</div>
-                <div className="text-[10px] text-sp-muted">{jobs.length}</div>
-              </div>
-              <div className="overflow-auto max-h-56">
-                <table className="w-full text-sm">
-                  <thead className="text-[10px] uppercase tracking-wider text-sp-muted">
-                    <tr className="border-b border-sp-border">
-                      <th className="text-left py-2 pr-2">Type</th>
-                      <th className="text-left py-2 pr-2">Status</th>
-                      <th className="text-left py-2 pr-2">Attempts</th>
-                      <th className="text-left py-2 pr-2">Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobs.map((j) => (
-                      <tr key={j.id} className="border-b border-sp-border/60">
-                        <td className="py-2 pr-2 font-mono">{j.type}</td>
-                        <td className="py-2 pr-2">
-                          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${badge(j.status)}`}>
-                            {j.status}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-2 text-sp-muted">{j.attempts}</td>
-                        <td className="py-2 pr-2 text-sp-muted">{fmt(j.updated_at)}</td>
-                      </tr>
-                    ))}
-                    {jobs.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="py-6 text-center text-sm text-sp-muted">
-                          No jobs for this run.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="border border-sp-border bg-sp-surface rounded p-3">
-              <div className="text-xs uppercase tracking-wider text-sp-muted mb-2">Scans (Run)</div>
-              <div className="overflow-auto max-h-56">
-                <table className="w-full text-sm">
-                  <thead className="text-[10px] uppercase tracking-wider text-sp-muted">
-                    <tr className="border-b border-sp-border">
-                      <th className="text-left py-2 pr-2">Scanner</th>
-                      <th className="text-left py-2 pr-2">Target</th>
-                      <th className="text-left py-2 pr-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {runScans.map((s) => (
-                      <tr key={s.id} className="border-b border-sp-border/60">
-                        <td className="py-2 pr-2 font-mono">{s.scanner}</td>
-                        <td className="py-2 pr-2 text-sp-muted font-mono break-all">{s.target}</td>
-                        <td className="py-2 pr-2 text-sp-muted">{s.status}</td>
-                      </tr>
-                    ))}
-                    {selectedRunId && runScans.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-6 text-center text-sm text-sp-muted">
-                          No scans recorded for this run yet.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="border border-sp-border bg-sp-surface rounded p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-xs uppercase tracking-wider text-sp-muted">Findings (Run)</div>
-                <div className="text-[10px] text-sp-muted">{runFindings.length}</div>
-              </div>
-              <div className="space-y-2 max-h-56 overflow-auto pr-1">
-                {runFindings.map((f) => (
-                  <div key={f.id} className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm">{f.title}</div>
-                      <div className="text-[10px] uppercase tracking-wider text-sp-muted">{f.severity}</div>
+            {/* Tab content */}
+            {activeTab === "overview" && (
+              <div className="space-y-4">
+                {/* Scheduled Runs */}
+                <section className="border border-sp-border bg-sp-surface rounded p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs uppercase tracking-wider text-sp-muted">Scheduled Runs</div>
+                    <div className="text-[10px] text-sp-muted">
+                      {schedules.filter((s) => s.enabled).length} active / {schedules.length} total
                     </div>
-                    <div className="text-[10px] text-sp-muted font-mono break-all">{f.url || "-"}</div>
                   </div>
-                ))}
-                {selectedRunId && runFindings.length === 0 ? (
-                  <div className="text-sm text-sp-muted py-6 text-center">No findings for this run.</div>
-                ) : null}
-              </div>
-            </section>
-          </section>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <section className="border border-sp-border bg-sp-surface rounded p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs uppercase tracking-wider text-sp-muted">Schedules</div>
-              <div className="text-[10px] text-sp-muted">{schedules.length}</div>
-            </div>
+                  {/* Active schedules — prominent display */}
+                  {schedules.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {schedules.map((s) => (
+                        <div
+                          key={s.id}
+                          className={`border rounded-lg overflow-hidden ${
+                            s.enabled
+                              ? "border-sp-cyan/30 bg-sp-cyan/5"
+                              : "border-sp-border bg-sp-bg/30 opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between px-3 py-2.5">
+                            <div className="flex items-center gap-3">
+                              {/* Enable/disable toggle */}
+                              <button
+                                onClick={() => toggleSchedule(s.id, !s.enabled)}
+                                className={`relative w-8 h-4 rounded-full transition-colors ${
+                                  s.enabled ? "bg-sp-cyan" : "bg-sp-border"
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 w-3 h-3 rounded-full bg-sp-text transition-transform ${
+                                    s.enabled ? "left-[18px]" : "left-0.5"
+                                  }`}
+                                />
+                              </button>
 
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <div className="flex flex-col gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-sp-muted">Interval (s)</div>
-                <input
-                  value={scheduleInterval}
-                  onChange={(e) => setScheduleInterval(parseInt(e.target.value || "0", 10))}
-                  className="bg-sp-bg border border-sp-border rounded px-2 py-1 text-sm outline-none focus:border-sp-cyan/60"
-                />
-              </div>
-              <div className="flex items-center gap-2 pt-5">
-                <input
-                  type="checkbox"
-                  checked={scheduleEnabled}
-                  onChange={(e) => setScheduleEnabled(e.target.checked)}
-                />
-                <span className="text-xs text-sp-muted">Enabled</span>
-              </div>
-              <button
-                onClick={createSchedule}
-                disabled={busy !== null}
-                className="col-span-2 px-3 py-2 rounded text-xs uppercase tracking-wider border border-sp-border text-sp-muted hover:text-sp-text disabled:opacity-60"
-              >
-                {busy === "schedule" ? "Saving..." : "Create Schedule"}
-              </button>
-            </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-sp-text">
+                                    Every {fmtInterval(s.interval_seconds)}
+                                  </span>
+                                  {s.enabled && (
+                                    <span className="flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border border-sp-cyan/40 text-sp-cyan bg-sp-cyan/10">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-sp-cyan animate-pulse-cyan" />
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-sp-muted mt-0.5">
+                                  {s.enabled ? (
+                                    <>
+                                      Next run: <span className="text-sp-cyan font-mono">{fmtRelative(s.next_run_at)}</span>
+                                      <span className="text-sp-muted"> ({fmt(s.next_run_at)})</span>
+                                    </>
+                                  ) : (
+                                    "Paused"
+                                  )}
+                                </div>
+                              </div>
+                            </div>
 
-            <div className="space-y-2 max-h-56 overflow-auto pr-1">
-              {schedules.map((s) => (
-                <div key={s.id} className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-mono">{s.id.slice(0, 8)}...</div>
-                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${badge(s.enabled ? "running" : "discarded")}`}>
-                      {s.enabled ? "enabled" : "disabled"}
-                    </span>
+                            <div className="flex items-center gap-2">
+                              {s.pipeline_config && (
+                                <span className="text-[10px] text-sp-muted font-mono">
+                                  hosts:{s.pipeline_config.max_hosts ?? "-"} http:{s.pipeline_config.max_http_targets ?? "-"}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => deleteSchedule(s.id)}
+                                className="px-2 py-1 rounded text-[10px] uppercase tracking-wider border border-sp-red/30 text-sp-red/70 hover:text-sp-red hover:bg-sp-red/10 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {schedules.length === 0 && (
+                    <div className="text-sm text-sp-muted text-center py-4 mb-3">
+                      No schedules configured. Create one to automate recon runs.
+                    </div>
+                  )}
+
+                  {/* Create new schedule */}
+                  <div className="border border-sp-border/50 rounded p-3 bg-sp-bg/20">
+                    <div className="text-[10px] uppercase tracking-wider text-sp-muted mb-2">New Schedule</div>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex flex-col gap-1">
+                        <div className="text-[10px] uppercase tracking-wider text-sp-muted">Interval (seconds)</div>
+                        <input
+                          value={scheduleInterval}
+                          onChange={(e) => setScheduleInterval(parseInt(e.target.value || "0", 10))}
+                          className="w-28 bg-sp-bg border border-sp-border rounded px-2 py-1 text-sm outline-none focus:border-sp-cyan/60"
+                        />
+                      </div>
+                      <div className="text-xs text-sp-muted pb-1">= {fmtInterval(scheduleInterval)}</div>
+                      <div className="flex items-center gap-2 pb-1">
+                        <input
+                          type="checkbox"
+                          checked={scheduleEnabled}
+                          onChange={(e) => setScheduleEnabled(e.target.checked)}
+                        />
+                        <span className="text-xs text-sp-muted">Start enabled</span>
+                      </div>
+                      <button
+                        onClick={createSchedule}
+                        disabled={busy !== null}
+                        className="px-3 py-1.5 rounded text-xs uppercase tracking-wider border border-sp-cyan/40 text-sp-cyan hover:bg-sp-cyan/10 disabled:opacity-60"
+                      >
+                        {busy === "schedule" ? "Creating..." : "Create"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-sp-muted mt-1">
-                    every {s.interval_seconds}s | next {fmt(s.next_run_at)}
+                </section>
+
+                {/* Changes */}
+                <section className="border border-sp-border bg-sp-surface rounded p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs uppercase tracking-wider text-sp-muted">Changes</div>
+                    <div className="text-[10px] text-sp-muted font-mono">{selectedRunId ? selectedRunId.slice(0, 8) : "-"}</div>
+                  </div>
+                  <ChangeViewer changes={changes} />
+                </section>
+
+                {/* Jobs */}
+                <section className="border border-sp-border bg-sp-surface rounded p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs uppercase tracking-wider text-sp-muted">Jobs (Run)</div>
+                    <div className="text-[10px] text-sp-muted">{jobs.length}</div>
+                  </div>
+                  <div className="overflow-auto max-h-56">
+                    <table className="w-full text-sm">
+                      <thead className="text-[10px] uppercase tracking-wider text-sp-muted">
+                        <tr className="border-b border-sp-border">
+                          <th className="text-left py-2 pr-2">Type</th>
+                          <th className="text-left py-2 pr-2">Status</th>
+                          <th className="text-left py-2 pr-2">Attempts</th>
+                          <th className="text-left py-2 pr-2">Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobs.map((j) => (
+                          <Fragment key={j.id}>
+                            <tr className="border-b border-sp-border/60">
+                              <td className="py-2 pr-2 font-mono">{j.type}</td>
+                              <td className="py-2 pr-2">
+                                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${badge(j.status)}`}>
+                                  {j.status}
+                                </span>
+                              </td>
+                              <td className="py-2 pr-2 text-sp-muted">{j.attempts}</td>
+                              <td className="py-2 pr-2 text-sp-muted">{fmt(j.updated_at)}</td>
+                            </tr>
+                            {j.last_error && (
+                              <tr className="border-b border-sp-border/30">
+                                <td colSpan={4} className="py-1.5 px-2">
+                                  <div className="text-xs text-sp-red/80 bg-sp-red/5 border border-sp-red/20 rounded px-2 py-1.5 font-mono whitespace-pre-wrap break-all">
+                                    {j.last_error}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                        {jobs.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-6 text-center text-sm text-sp-muted">
+                              No jobs for this run.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                {/* Scans */}
+                <section className="border border-sp-border bg-sp-surface rounded p-3">
+                  <div className="text-xs uppercase tracking-wider text-sp-muted mb-2">Scans (Run)</div>
+                  <div className="overflow-auto max-h-56">
+                    <table className="w-full text-sm">
+                      <thead className="text-[10px] uppercase tracking-wider text-sp-muted">
+                        <tr className="border-b border-sp-border">
+                          <th className="text-left py-2 pr-2">Scanner</th>
+                          <th className="text-left py-2 pr-2">Target</th>
+                          <th className="text-left py-2 pr-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {runScans.map((s) => (
+                          <tr key={s.id} className="border-b border-sp-border/60">
+                            <td className="py-2 pr-2 font-mono">{s.scanner}</td>
+                            <td className="py-2 pr-2 text-sp-muted font-mono break-all">{s.target}</td>
+                            <td className="py-2 pr-2 text-sp-muted">{s.status}</td>
+                          </tr>
+                        ))}
+                        {selectedRunId && runScans.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-6 text-center text-sm text-sp-muted">
+                              No scans recorded for this run yet.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                {/* Findings */}
+                <section className="border border-sp-border bg-sp-surface rounded p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs uppercase tracking-wider text-sp-muted">Findings (Run)</div>
+                    <div className="text-[10px] text-sp-muted">{runFindings.length}</div>
+                  </div>
+                  <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                    {runFindings.map((f) => (
+                      <div key={f.id} className="border border-sp-border rounded p-2 bg-sp-bg/30">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm">{f.title}</div>
+                          <div className="text-[10px] uppercase tracking-wider text-sp-muted">{f.severity}</div>
+                        </div>
+                        <div className="text-[10px] text-sp-muted font-mono break-all">{f.url || "-"}</div>
+                      </div>
+                    ))}
+                    {selectedRunId && runFindings.length === 0 ? (
+                      <div className="text-sm text-sp-muted py-6 text-center">No findings for this run.</div>
+                    ) : null}
+                  </div>
+                </section>
+
+              </div>
+            )}
+
+            {activeTab === "assets" && (
+              <section className="border border-sp-border bg-sp-surface rounded p-3">
+                <AssetBrowser assets={assets} services={services} />
+              </section>
+            )}
+
+            {activeTab === "services" && (
+              <section className="border border-sp-border bg-sp-surface rounded p-3">
+                <ServiceBrowser services={services} assets={assets} />
+              </section>
+            )}
+
+            {activeTab === "graph" && (
+              <section className="border border-sp-border bg-sp-surface rounded p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs uppercase tracking-wider text-sp-muted">Recon Graph</div>
+                  <div className="text-[10px] text-sp-muted">
+                    {assets.length} nodes | {edges.length} edges
                   </div>
                 </div>
-              ))}
-              {schedules.length === 0 ? <div className="text-sm text-sp-muted py-6 text-center">No schedules.</div> : null}
-            </div>
-          </section>
-
-          <section className="border border-sp-border bg-sp-surface rounded p-3">
-            <div className="text-xs uppercase tracking-wider text-sp-muted mb-2">Inventory Snapshot</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                <div className="text-[10px] uppercase tracking-wider text-sp-muted">Assets</div>
-                <div className="text-lg">{assets.length}</div>
-              </div>
-              <div className="border border-sp-border rounded p-2 bg-sp-bg/30">
-                <div className="text-[10px] uppercase tracking-wider text-sp-muted">Services</div>
-                <div className="text-lg">{services.length}</div>
-              </div>
-            </div>
-            <div className="text-[10px] text-sp-muted mt-3">
-              Tip: inventory is global per target (not per run) in this view; use the Changes panel to see run deltas.
-            </div>
+                <ReconGraph assets={assets} edges={edges} />
+              </section>
+            )}
           </section>
         </div>
-
-        <section className="border border-sp-border bg-sp-surface rounded p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs uppercase tracking-wider text-sp-muted">Recon Graph</div>
-            <div className="text-[10px] text-sp-muted">
-              {assets.length} nodes | {edges.length} edges
-            </div>
-          </div>
-          <ReconGraph assets={assets} edges={edges} />
-        </section>
       </main>
     </div>
   );

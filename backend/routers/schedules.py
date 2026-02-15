@@ -116,3 +116,14 @@ async def update_schedule(schedule_id: str, req: UpdateScheduleRequest, db: Asyn
         "updated_at": schedule.updated_at.isoformat() if schedule.updated_at else None,
     }
 
+
+@router.delete("/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: str, db: AsyncSession = Depends(get_db)):
+    schedule = await db.get(Schedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    await db.delete(schedule)
+    await db.commit()
+    return {"status": "deleted", "id": schedule_id}
+

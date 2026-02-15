@@ -98,6 +98,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  deleteSchedule: (scheduleId: string) =>
+    fetchAPI<{ status: string; id: string }>(`/api/schedules/${scheduleId}`, {
+      method: "DELETE",
+    }),
 
   // ReconGraph / Inventory
   listAssets: (targetId: string) => fetchAPI<Array<any>>(`/api/targets/${targetId}/assets`),

@@ -55,6 +55,7 @@ SHADOWPULSE combines the intelligence of large language models with battle-teste
 - Multi-stage pipeline: Subfinder → DNS → Nmap → httpx → Nuclei
 - Configurable scan parameters (max hosts, targets, timeouts)
 - Run cancellation and progress tracking
+- Tabbed dashboard: Overview, Asset Browser, Service Browser, and Graph views
 
 **Continuous Monitoring & Change Detection**
 - Track assets across multiple reconnaissance runs
@@ -65,10 +66,13 @@ SHADOWPULSE combines the intelligence of large language models with battle-teste
 - Discovered subdomains, IPs, URLs, and hosts with first/last seen timestamps
 - Service enumeration with port, protocol, product, and version tracking
 - Relationship mapping between assets (DNS resolution, redirects)
+- Filterable asset and service browsers with search, type/status filters, and expandable detail rows
+- Per-run change viewer: new discoveries, pending verification, confirmed closures, unresolved items
 
 **Job Queue & Scheduling**
 - Database-backed job queue — no Redis required
-- Scheduled recurring scans with configurable intervals
+- Scheduled recurring scans with configurable intervals and toggle enable/disable
+- Schedule management: create, update, and delete schedules via UI and API
 - Concurrent worker execution with PostgreSQL `SKIP LOCKED`
 
 **Security Hardening**
@@ -112,7 +116,7 @@ SHADOWPULSE combines the intelligence of large language models with battle-teste
 <!-- TODO: Replace with actual screenshot -->
 > ![Recon Dashboard Screenshot](docs/assets/screenshots/recon_screenshot.png)
 >
-> *Target overview showing reconnaissance runs, pipeline status, and discovered asset counts.*
+> *Target dashboard with tabbed layout — overview with schedule management and change detection, filterable asset/service browsers, and interactive graph.*
 
 </details>
 
@@ -310,6 +314,8 @@ SHADOWPULSE exposes a REST API with interactive Swagger docs at `/docs`.
 | `GET` | `/api/targets/{id}/changes` | Get change detection results |
 | `GET` | `/api/targets/{id}/events` | List audit trail events |
 | `POST` | `/api/targets/{id}/schedules` | Create recurring scan schedule |
+| `PATCH` | `/api/schedules/{id}` | Update a schedule |
+| `DELETE` | `/api/schedules/{id}` | Delete a schedule |
 | `POST` | `/api/sessions` | Create a chat session |
 | `POST` | `/api/sessions/{id}/chat` | Send a chat message |
 | `WS` | `/ws/{session_id}` | WebSocket for real-time updates |
@@ -345,7 +351,7 @@ SHADOWPULSE exposes a REST API with interactive Swagger docs at `/docs`.
 - [x] Deterministic recon pipeline (subfinder → DNS → nmap → httpx → nuclei)
 - [x] Asset inventory with change detection
 - [x] Database-backed job queue and scheduler
-- [ ] Full recon mode UI (inventory browser, change viewer)
+- [x] Full recon mode UI (inventory browser, change viewer, schedule management)
 - [x] Scope enforcement and rate limiting
 - [x] Audit trail and retention policies
 - [x] Session persistence across navigation
