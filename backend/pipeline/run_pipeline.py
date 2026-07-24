@@ -203,8 +203,13 @@ async def run_pipeline(
             nmap_services.extend(n_res.services)
 
         await _ensure_run_not_discarded(db, run.id)
-        # 4) httpx probe on likely-web services -> URLs
-        http_targets = _build_http_targets(nmap_services)
+        # 4) httpx probe — hostname-first so CDN-fronted apps are actually probed.
+        # `subdomains` (line ~103) holds the in-scope discovered hostnames.
+        http_targets = _build_http_targets(
+            hostnames=subdomains,
+            ip_services=nmap_services,
+            seen_hostnames=set(),
+        )
         http_targets = http_targets[:max_http_targets]
 
         httpx_urls: list[str] = []
@@ -261,27 +266,52 @@ async def run_pipeline(
         raise
 
 
-def _build_http_targets(services) -> list[str]:
+def _build_http_targets(hostnames, ip_services, seen_hostnames=None) -> list[str]:
+    """Build httpx probe URLs, hostname-first.
+
+    Hostnames (discovered, in-scope subdomains/root) yield both https and http
+    URLs so CDN-fronted apps (which route by Host header) are actually probed.
+    IP-based services are included ONLY when the IP is not already covered by a
+    hostname — bare IPs (non-fronted hosts) still get probed, but CDN edge IPs
+    behind a hostname do not (they 404 on IP-addressed requests).
+    """
     targets: list[str] = []
     seen: set[str] = set()
+    covered: set[str] = set(seen_hostnames or [])
 
-    for s in services:
-        port = s.port
-        proto = (s.proto or "tcp").lower()
-        host = s.host_normalized
+    # 1) Hostnames first — both schemes.
+    for host in hostnames:
+        host = (host or "").strip().rstrip(".")
         if not host:
             continue
+        covered.add(host)  # Mark this hostname as covered
+        for scheme in ("https", "http"):
+            url = f"{scheme}://{host}"
+            norm = normalize_url(url)
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            targets.append(norm)
 
-        if proto != "tcp":
+    # 2) IP-based services only when no hostname covers them.
+    for s in ip_services:
+        host = getattr(s, "host_normalized", None)
+        host_type = getattr(s, "host_type", "ip")
+        proto = (getattr(s, "proto", "tcp") or "tcp").lower()
+        port = getattr(s, "port", None)
+        if not host or proto != "tcp" or port is None:
             continue
-
+        # Skip IP services when we have hostnames to probe instead
+        if hostnames and host_type == "ip":
+            continue
+        if host in covered:
+            continue  # covered by a hostname — don't probe the edge IP
         if port in WEB_PORTS_HTTPS:
             url = f"https://{host}:{port}"
         elif port in WEB_PORTS_HTTP:
-            url = f"http://{host}:{port}" if port != 80 else f"http://{host}"
+            url = f"http://{host}" if port == 80 else f"http://{host}:{port}"
         else:
             continue
-
         norm = normalize_url(url)
         if not norm or norm in seen:
             continue
