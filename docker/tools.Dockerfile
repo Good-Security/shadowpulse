@@ -74,6 +74,14 @@ RUN GAU_VERSION=$(curl -s https://api.github.com/repos/lc/gau/releases/latest | 
     chmod +x /usr/local/bin/gau && \
     rm /tmp/gau.tar.gz
 
+# Install trufflehog (pre-built binary)
+RUN TRUFFLEHOG_VERSION=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
+    ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
+    curl -sL "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_${ARCH}.tar.gz" -o /tmp/trufflehog.tar.gz && \
+    tar -xzf /tmp/trufflehog.tar.gz -C /usr/local/bin/ trufflehog && \
+    chmod +x /usr/local/bin/trufflehog && \
+    rm /tmp/trufflehog.tar.gz
+
 # Install ffuf (pre-built binary)
 RUN FFUF_VERSION=$(curl -s https://api.github.com/repos/ffuf/ffuf/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
     ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
