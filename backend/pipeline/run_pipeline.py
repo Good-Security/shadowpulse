@@ -281,6 +281,8 @@ async def run_pipeline(
             if a.type == "url" and a.normalized and check_in_scope(scope, a.normalized, "url"):
                 if a.normalized not in httpx_urls:
                     httpx_urls.append(a.normalized)
+        # Cap the nuclei target set (httpx live URLs + gau historical URLs).
+        httpx_urls = httpx_urls[:max_http_targets]
 
         await _ensure_run_not_discarded(db, run.id)
         # 5) nuclei constrained to live URLs
