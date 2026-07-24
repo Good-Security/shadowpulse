@@ -11,6 +11,9 @@ from scanners.subfinder_scanner import SubfinderScanner
 from scanners.nmap_scanner import NmapScanner
 from scanners.httpx_scanner import HttpxScanner
 from scanners.nuclei_scanner import NucleiScanner
+from scanners.naabu_scanner import NaabuScanner, ports_by_host
+from scanners.tlsx_scanner import TlsxScanner
+from scanners.gau_scanner import GauScanner
 from scanners.base import ScanResult as ScannerScanResult, AssetArtifact, EdgeArtifact
 from recongraph.ingest import ingest_scan_result, set_asset_status, upsert_asset_seen
 from recongraph.normalize import normalize_domain, normalize_url, is_ip
@@ -187,20 +190,56 @@ async def run_pipeline(
                 uniq_ips.append(ip)
         uniq_ips = uniq_ips[:max_hosts]
 
-        # 3) Nmap: services on discovered hosts
+        # 2.5) naabu: fast port discovery across all resolved hosts.
+        naabu_ports: dict[str, str] = {}
+        if uniq_ips:
+            await _ensure_run_not_discarded(db, run.id)
+            naabu = NaabuScanner()
+            naabu_res = await _run_scanner_and_persist(
+                db,
+                run=run,
+                target=target.root_domain,
+                scanner_name="naabu",
+                scanner=naabu,
+                config={"targets": uniq_ips},
+            )
+            naabu_ports = ports_by_host(naabu_res.services)
+
+        # 3) Nmap: deep service scan, constrained to naabu's open ports per host.
         nmap = NmapScanner()
         nmap_services = []
         for ip in uniq_ips:
             await _ensure_run_not_discarded(db, run.id)
+            nmap_config = {"scan_type": "service"}
+            if ip in naabu_ports:
+                nmap_config["ports"] = naabu_ports[ip]
             n_res = await _run_scanner_and_persist(
                 db,
                 run=run,
                 target=ip,
                 scanner_name="nmap",
                 scanner=nmap,
-                config={"scan_type": "service"},
+                config=nmap_config,
             )
             nmap_services.extend(n_res.services)
+
+        # 3.5) tlsx: TLS/cert metadata on discovered hostnames; SAN -> new subdomains.
+        await _ensure_run_not_discarded(db, run.id)
+        if subdomains:
+            tlsx = TlsxScanner()
+            tlsx_res = await _run_scanner_and_persist(
+                db,
+                run=run,
+                target=target.root_domain,
+                scanner_name="tlsx",
+                scanner=tlsx,
+                config={"targets": subdomains},
+            )
+            # Fold in-scope SAN subdomains into the hostname set for httpx.
+            for a in tlsx_res.assets:
+                if a.type == "subdomain" and a.normalized and check_in_scope(scope, a.normalized, "subdomain"):
+                    if a.normalized not in subdomains:
+                        subdomains.append(a.normalized)
 
         await _ensure_run_not_discarded(db, run.id)
         # 4) httpx probe — hostname-first so CDN-fronted apps are actually probed.
@@ -225,6 +264,22 @@ async def run_pipeline(
             )
             for a in h_res.assets:
                 if a.type == "url" and a.normalized:
+                    httpx_urls.append(a.normalized)
+
+        # 4.5) gau: historical URLs for the root domain, scope-filtered, feed nuclei.
+        await _ensure_run_not_discarded(db, run.id)
+        gau = GauScanner()
+        gau_res = await _run_scanner_and_persist(
+            db,
+            run=run,
+            target=target.root_domain,
+            scanner_name="gau",
+            scanner=gau,
+            config={"max_urls": 500},
+        )
+        for a in gau_res.assets:
+            if a.type == "url" and a.normalized and check_in_scope(scope, a.normalized, "url"):
+                if a.normalized not in httpx_urls:
                     httpx_urls.append(a.normalized)
 
         await _ensure_run_not_discarded(db, run.id)
