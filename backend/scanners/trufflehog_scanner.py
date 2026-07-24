@@ -49,14 +49,16 @@ class TrufflehogScanner(BaseScanner):
         # runs trufflehog, then cleans up.
         quoted_urls = " ".join(shlex.quote(u) for u in urls)
         script = (
-            "d=$(mktemp -d) && i=0 && "
+            "d=$(mktemp -d) && "
+            # Ensure the temp dir (with fetched, possibly secret-bearing files) is
+            # removed even if this script is killed on the outer exec timeout.
+            "trap 'rm -rf \"$d\"' EXIT && i=0 && "
             "for u in " + quoted_urls + "; do "
             "  i=$((i+1)); "
             "  curl -sL --max-time 20 --max-filesize 5000000 \"$u\" -o \"$d/f$i\" 2>/dev/null || true; "
             "done; "
             # verification ON (no --only-verified) so we get both verified + unverified
-            "trufflehog filesystem \"$d\" --json --no-update 2>/dev/null; "
-            "rm -rf \"$d\""
+            "trufflehog filesystem \"$d\" --json --no-update 2>/dev/null"
         )
         cmd = ["sh", "-c", script]
 
