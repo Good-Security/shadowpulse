@@ -4,7 +4,10 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      # Host 5433 -> container 5432 (host 5432 is used by another project).
+      # Backend connects over the internal docker network (postgres:5432),
+      # so this host remap only affects direct host access.
+      - "5433:5432"
     environment:
       POSTGRES_DB: shadowpulse
       POSTGRES_USER: shadowpulse
@@ -67,7 +70,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://shadowpulse:shadowpulse@postgres:5432/shadowpulse
-    command: ["sh", "-lc", "python -m worker.main"]
+    command: ["sh", "-lc", "export WORKER_ID=\"worker-$(hostname)\"; python -m worker.main"]
     volumes:
       - ./backend:/app
       - ./data:/data
