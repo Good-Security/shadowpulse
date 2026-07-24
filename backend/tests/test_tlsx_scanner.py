@@ -31,3 +31,15 @@ def test_parse_skips_malformed():
     scanner = TlsxScanner()
     findings, assets = scanner._parse_lines(lines)
     assert any(a.normalized == "h.example.com" for a in assets)
+
+
+def test_parse_flags_expired_cert():
+    # not_after in the past -> medium expired-cert finding
+    lines = [
+        '{"host":"expired.example.com","port":"443","subject_an":["expired.example.com"],'
+        '"issuer_cn":"CA","tls_version":"tls13","not_after":"2020-01-01T00:00:00Z"}'
+    ]
+    scanner = TlsxScanner()
+    findings, assets = scanner._parse_lines(lines)
+    expired = [f for f in findings if "expired" in f.title.lower() and f.severity == "medium"]
+    assert expired, "expected a medium-severity expired-cert finding"

@@ -1,6 +1,6 @@
 import json
 import shlex
-from datetime import datetime
+from datetime import datetime, timezone
 
 from scanners.base import BaseScanner, ScanResult, FindingResult, AssetArtifact
 from recongraph.normalize import normalize_domain
@@ -99,5 +99,23 @@ class TlsxScanner(BaseScanner):
                     remediation="Disable TLS 1.0/1.1 and SSL 3.0; require TLS 1.2+ (ideally 1.3).",
                     url=host,
                 ))
+
+            # Medium finding: expired certificate
+            if not_after:
+                try:
+                    expiry = datetime.fromisoformat(not_after.replace("Z", "+00:00"))
+                    if expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=timezone.utc)
+                    if expiry < datetime.now(timezone.utc):
+                        findings.append(FindingResult(
+                            severity="medium",
+                            title=f"Expired TLS certificate on {host}",
+                            description=f"Host {host} presents a TLS certificate that expired on {not_after}.",
+                            impact="Expired certificates trigger browser/client security warnings, can break automated clients and integrations that validate certificate chains, and often indicate unmaintained or neglected infrastructure.",
+                            remediation="Renew the TLS certificate and ensure automated renewal (e.g. ACME/Let's Encrypt) is configured to prevent recurrence.",
+                            url=host,
+                        ))
+                except (ValueError, TypeError):
+                    pass
 
         return findings, assets
