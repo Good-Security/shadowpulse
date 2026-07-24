@@ -50,6 +50,14 @@ RUN DNSX_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/dnsx/re
     chmod +x /usr/local/bin/dnsx && \
     rm /tmp/dnsx.zip
 
+# Install naabu (pre-built binary)
+RUN NAABU_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/naabu/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
+    ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
+    curl -sL "https://github.com/projectdiscovery/naabu/releases/download/v${NAABU_VERSION}/naabu_${NAABU_VERSION}_linux_${ARCH}.zip" -o /tmp/naabu.zip && \
+    unzip -o /tmp/naabu.zip -d /usr/local/bin/ && \
+    chmod +x /usr/local/bin/naabu && \
+    rm /tmp/naabu.zip
+
 # Install ffuf (pre-built binary)
 RUN FFUF_VERSION=$(curl -s https://api.github.com/repos/ffuf/ffuf/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
     ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
