@@ -1,4 +1,4 @@
-.PHONY: install dev dev-backend dev-frontend docker-up docker-down docker-logs tools-build db-up db-down db-psql db-reset
+.PHONY: install dev dev-backend dev-frontend docker-up docker-up-scaled docker-down docker-logs tools-build db-up db-down db-psql db-reset
 
 # Local development
 install:
@@ -23,6 +23,13 @@ docker-up:
 	@echo "  Backend:  http://localhost:8000"
 	@echo "  Logs:     make docker-logs"
 	@echo "  Stop:     make docker-down"
+
+docker-up-scaled:
+	docker compose up --build -d --scale worker=3
+	@echo ""
+	@echo "SHADOWPULSE running with 3 workers:"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  Backend:  http://localhost:8000"
 
 docker-down:
 	docker compose down
