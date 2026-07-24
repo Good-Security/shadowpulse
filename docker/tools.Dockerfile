@@ -66,6 +66,14 @@ RUN TLSX_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/tlsx/re
     chmod +x /usr/local/bin/tlsx && \
     rm /tmp/tlsx.zip
 
+# Install gau (pre-built binary)
+RUN GAU_VERSION=$(curl -s https://api.github.com/repos/lc/gau/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
+    ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
+    curl -sL "https://github.com/lc/gau/releases/download/v${GAU_VERSION}/gau_${GAU_VERSION}_linux_${ARCH}.tar.gz" -o /tmp/gau.tar.gz && \
+    tar -xzf /tmp/gau.tar.gz -C /usr/local/bin/ gau && \
+    chmod +x /usr/local/bin/gau && \
+    rm /tmp/gau.tar.gz
+
 # Install ffuf (pre-built binary)
 RUN FFUF_VERSION=$(curl -s https://api.github.com/repos/ffuf/ffuf/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//') && \
     ARCH=$(case ${TARGETARCH} in amd64) echo "amd64" ;; arm64) echo "arm64" ;; *) echo "amd64" ;; esac) && \
