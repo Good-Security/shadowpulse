@@ -17,6 +17,24 @@ def test_redact_short_secret_fully_masked():
     assert "abc" not in r
 
 
+def test_redact_medium_secret_fully_masked():
+    # Regression: 9-16 char secrets must be FULLY masked, not show 8 of N chars.
+    for s in ["123456789", "sk_live_abc12", "A" * 16]:
+        r = _redact_secret(s)
+        assert r == "*" * len(s), f"{s!r} leaked as {r!r}"
+        # no run of original chars survives
+        assert not any(a == b for a, b in zip(s, r) if a != "*")
+
+
+def test_redact_long_secret_minority_exposed():
+    # >16 chars: at most 8 exposed, majority masked
+    s = "A" * 30
+    r = _redact_secret(s)
+    exposed = sum(1 for a, b in zip(s, r) if a == b)
+    assert exposed <= 8
+    assert r.count("*") >= len(s) - 8
+
+
 def test_parse_verified_secret_is_high_or_critical():
     # trufflehog --json emits one JSON object per finding
     line = json.dumps({

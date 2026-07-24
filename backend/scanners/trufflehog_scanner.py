@@ -13,13 +13,12 @@ CRITICAL_DETECTORS = {
 
 
 def _redact_secret(secret: str) -> str:
-    """Mask a secret for safe storage: keep a short prefix+suffix, mask the middle.
-
-    Short secrets (<= 8 chars) are fully masked (can't safely reveal prefix+suffix).
-    """
+    """Mask a secret for safe storage. Short/medium secrets (<= 16 chars) are
+    fully masked; longer secrets reveal only a 4-char prefix + 4-char suffix,
+    with the majority of characters masked."""
     if not secret:
         return ""
-    if len(secret) <= 8:
+    if len(secret) <= 16:
         return "*" * len(secret)
     return f"{secret[:4]}{'*' * (len(secret) - 8)}{secret[-4:]}"
 
