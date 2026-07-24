@@ -14,6 +14,7 @@ from scanners.nuclei_scanner import NucleiScanner
 from scanners.naabu_scanner import NaabuScanner, ports_by_host
 from scanners.tlsx_scanner import TlsxScanner
 from scanners.gau_scanner import GauScanner
+from scanners.trufflehog_scanner import TrufflehogScanner
 from scanners.base import ScanResult as ScannerScanResult, AssetArtifact, EdgeArtifact
 from recongraph.ingest import ingest_scan_result, set_asset_status, upsert_asset_seen
 from recongraph.normalize import normalize_domain, normalize_url, is_ip
@@ -297,6 +298,19 @@ async def run_pipeline(
                 scanner=nuclei,
                 config={"targets": httpx_urls},
                 link_findings_to_url_assets=True,
+            )
+
+        # 6) trufflehog: fetch discovered URLs and scan content for secrets.
+        await _ensure_run_not_discarded(db, run.id)
+        if httpx_urls:
+            trufflehog = TrufflehogScanner()
+            await _run_scanner_and_persist(
+                db,
+                run=run,
+                target=target.root_domain,
+                scanner_name="trufflehog",
+                scanner=trufflehog,
+                config={"targets": httpx_urls},
             )
 
         await _ensure_run_not_discarded(db, run.id)
