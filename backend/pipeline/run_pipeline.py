@@ -313,6 +313,21 @@ async def run_pipeline(
                 config={"targets": httpx_urls},
             )
 
+        # 7) subdomain takeover: nuclei takeover templates against all subdomains
+        #    (resolved + unresolved — dangling records are prime candidates).
+        await _ensure_run_not_discarded(db, run.id)
+        takeover_targets = _takeover_targets(subdomains, unresolved)
+        if takeover_targets:
+            takeover = NucleiScanner()
+            await _run_scanner_and_persist(
+                db,
+                run=run,
+                target=target.root_domain,
+                scanner_name="takeover",
+                scanner=takeover,
+                config={"tags": "takeover", "targets": takeover_targets},
+            )
+
         await _ensure_run_not_discarded(db, run.id)
         # Phase 5: mark candidates not seen in this run as stale and enqueue verification jobs.
         await _enqueue_verification_jobs(db, target_id=target_id, run_id=run.id)
@@ -386,6 +401,32 @@ def _build_http_targets(hostnames, ip_services, seen_hostnames=None) -> list[str
             continue
         seen.add(norm)
         targets.append(norm)
+
+    return targets
+
+
+def _takeover_targets(subdomains, unresolved) -> list[str]:
+    """Assemble the subdomain hostname list to scan for takeover.
+
+    Includes resolved subdomains AND unresolved ones (dangling records are the
+    prime takeover candidates). `unresolved` is a list of (hostname, reason)
+    tuples from the DNS stage. Deduped, blanks skipped.
+    """
+    targets: list[str] = []
+    seen: set[str] = set()
+
+    for host in subdomains:
+        h = (host or "").strip()
+        if h and h not in seen:
+            seen.add(h)
+            targets.append(h)
+
+    for entry in unresolved:
+        host = entry[0] if entry else ""
+        h = (host or "").strip()
+        if h and h not in seen:
+            seen.add(h)
+            targets.append(h)
 
     return targets
 
